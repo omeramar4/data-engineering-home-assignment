@@ -1,39 +1,8 @@
-import os
-import sys
-import posixpath
-from pyspark.sql.types import DateType
-
-from awsglue.context import GlueContext
-from awsglue.job import Job
-from awsglue.transforms import *
-from awsglue.utils import getResolvedOptions
-from pyspark.context import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql import Window, functions as f, DataFrame as SparkDataFrame
+from pyspark.sql.types import DateType
 
-
-class BaseResultsHandler:
-
-    def handle(self, df: SparkDataFrame, name: str) -> None:
-        raise NotImplementedError('Subclasses must implement handle method')
-
-
-class PrintResultsHandler(BaseResultsHandler):
-
-    def handle(self, df: SparkDataFrame, name: str) -> None:
-        print(f'Results for {name}:')
-        df.show(truncate=False)
-
-
-class S3ParquetResultsHandler(BaseResultsHandler):
-
-    def __init__(self, output_base_path: str):
-        self.output_base_path = output_base_path
-
-    def handle(self, df: SparkDataFrame, name: str) -> None:
-        output_path = posixpath.join(self.output_base_path, name)
-        df.coalesce(1).write.mode('overwrite').parquet(output_path)
-        print(f'Results saved to {output_path}')
+from assignment.utils.results_handlers import BaseResultsHandler, S3ParquetResultsHandler
 
 
 class StockStats:
@@ -129,19 +98,3 @@ class StockStats:
             .drop('return_30d')
             .limit(3)
         )
-
-
-if __name__ == '__main__':
-    args = getResolvedOptions(sys.argv, ["JOB_NAME", "S3_BUCKET", "DATA_PATH"])
-    sc = SparkContext()
-    glueContext = GlueContext(sc)
-    spark = glueContext.spark_session
-    job = Job(glueContext)
-    job.init(args["JOB_NAME"], args)
-
-    stocks_stats = StockStats(
-        data_path=args["DATA_PATH"],
-        results_handler=S3ParquetResultsHandler(output_base_path=f"s3://{args['S3_BUCKET']}/results")
-    )
-    stocks_stats.run()
-    job.commit()
