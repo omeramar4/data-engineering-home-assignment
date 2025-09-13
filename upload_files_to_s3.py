@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import boto3
 import os
+import zipfile
 
 # Load environment variables from .env
 with open('.env', 'r') as f:
@@ -37,12 +38,29 @@ for output in response['Stacks'][0]['Outputs']:
 
 print(f"Bucket: {bucket_name}")
 
-# Upload files
-print("Uploading assignment/objectives/stock_stats.py...")
-s3.upload_file('assignment/objectives/stock_stats.py', bucket_name, 'scripts/stock_stats.py')
-print("✅ Stock stats script uploaded")
+# --- ZIP THE assignment/ PACKAGE ---
+def zipdir(path, ziph):
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            filepath = os.path.join(root, file)
+            arcname = os.path.relpath(filepath, os.path.dirname(path))
+            ziph.write(filepath, arcname)
 
-print("Uploading stocks_data.csv...")
+zip_path = 'assignment.zip'
+with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    zipdir('assignment', zipf)
+print(f"Zipped assignment/ to {zip_path}")
+
+# --- UPLOAD FILES ---
+print("Uploading assignment.zip to S3...")
+s3.upload_file(zip_path, bucket_name, 'libs/assignment.zip')
+print("✅ assignment.zip uploaded to libs/assignment.zip")
+
+print("Uploading glue.py to S3...")
+s3.upload_file('assignment/jobs/glue.py', bucket_name, 'scripts/glue.py')
+print("✅ glue.py uploaded to scripts/glue.py")
+
+print("Uploading stocks_data.csv to S3...")
 s3.upload_file('stocks_data.csv', bucket_name, 'input/stocks_data.csv')
 print("✅ CSV file uploaded")
 
