@@ -82,13 +82,13 @@ Resources:
       Role: !Ref GlueServiceRole
       Command:
         Name: glueetl
-        ScriptLocation: !Sub 's3://${DataEngineeringBucket}/scripts/stock_stats.py'
+        ScriptLocation: !Sub 's3://${DataEngineeringBucket}/scripts/glue.py'
         PythonVersion: 3
       DefaultArguments:
         '--job-language': python
         '--enable-metrics': true
         '--enable-continuous-cloudwatch-log': true
-        '--additional-python-modules': 'pydantic==2.11.7'
+        '--extra-py-files': !Sub 's3://${DataEngineeringBucket}/libs/assignment.zip'
         '--JOB_NAME': !Sub '${GlueJobName}'
         '--S3_BUCKET': !Ref DataEngineeringBucket
         '--DATA_PATH': !Sub 's3://${DataEngineeringBucket}/input/stocks_data.csv'
@@ -232,20 +232,3 @@ Outputs:
     Value: !Ref GlueDatabase
     Export:
       Name: !Sub '${AWS::StackName}-GlueDatabase'
-
-  AthenaQueryExample:
-    Description: 'Example Athena queries to test the pipeline'
-    Value: !Sub |
-      -- Query average daily returns
-      SELECT * FROM ${GlueDatabase}.average_daily_return 
-      ORDER BY date DESC LIMIT 10;
-      
-      -- Query highest worth stock
-      SELECT * FROM ${GlueDatabase}.highest_worth;
-      
-      -- Query most volatile stock
-      SELECT * FROM ${GlueDatabase}.most_volatile;
-      
-      -- Query top 30-day returns
-      SELECT * FROM ${GlueDatabase}.top_30day_returns 
-      ORDER BY return_30day DESC LIMIT 3;
