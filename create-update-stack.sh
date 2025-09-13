@@ -17,11 +17,13 @@ fi
 # Now you can use the environment variables
 echo "AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID"
 echo "AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY"
+echo "AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION"
 echo "STACK_NAME: $STACK_NAME"
 
 # Set AWS credentials as environment variables
 export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
 export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+export AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION
 
 
 # Notify the user that the stack update process is starting
@@ -34,29 +36,36 @@ stack=$STACK_NAME
 echo "Stack: $stack"
 
 # Check if the stack exists by attempting to describe it
-# If the stack doesn't exist, the command will return an error, so we use '|| echo -1' to handle it
-stack_exists=`aws cloudformation describe-stacks --stack-name "$stack" || echo -1`
+stack_status=$(aws cloudformation describe-stacks --stack-name "$stack" --query "Stacks[0].StackStatus" --output text 2>/dev/null || echo -1)
 
-# If the stack does not exist (indicated by -1), create a new one
-if test "$stack_exists" = "-1"
-then
+if [ "$stack_status" = "-1" ]; then
+    # Stack does not exist, create it
     echo "Creating a new stack: $stack"
     aws cloudformation create-stack --stack-name "$stack" \
         --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
         --template-body file://"$stack_yml"
-
-    # Wait for the stack creation to complete
+    echo "Waiting for stack creation to complete: $stack"
+    aws cloudformation wait stack-create-complete --stack-name "$stack"
+    status=$?
+elif [ "$stack_status" = "ROLLBACK_COMPLETE" ]; then
+    # Stack is in ROLLBACK_COMPLETE, must delete and recreate
+    echo "Stack $stack is in ROLLBACK_COMPLETE. Deleting it before recreating."
+    aws cloudformation delete-stack --stack-name "$stack"
+    echo "Waiting for stack deletion to complete: $stack"
+    aws cloudformation wait stack-delete-complete --stack-name "$stack"
+    echo "Recreating stack: $stack"
+    aws cloudformation create-stack --stack-name "$stack" \
+        --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+        --template-body file://"$stack_yml"
     echo "Waiting for stack creation to complete: $stack"
     aws cloudformation wait stack-create-complete --stack-name "$stack"
     status=$?
 else
-    # If the stack exists, update it with the new template
+    # Stack exists and is not in ROLLBACK_COMPLETE, update it
     echo "Updating the stack: $stack"
     aws cloudformation update-stack --stack-name "$stack" \
         --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
         --template-body file://"$stack_yml"
-
-    # Wait for the stack update to complete
     echo "Waiting for stack update to complete: $stack"
     aws cloudformation wait stack-update-complete --stack-name "$stack"
     status=$?
